@@ -1,19 +1,35 @@
-// postgres, sqlite
-
+// node set up
 const express = require('express');
 const cors = require('cors');
 const cookieSession = require('cookie-session');
 const app = express();
+
+// application set up
 const port = 4000;
 
-app.use(cors());
+// db
+const db = require('./db');
+const pool = db.createPool();
+db.migrate(pool);
+
+// application
+
+// cors
+app.use(cors({
+  "credentials": true,
+  "optionsSuccessStatus": 200
+}));
+
 app.use(express.json());       
 app.use(express.urlencoded()); 
 app.use(cookieSession({
   name: 'session',
+  secure: false,
+  httpOnly: false,
   secret: "abcd",
   maxAge: 24 * 60 * 60 * 1000 // 24 hours
 }));
+
 app.use(express.static(__dirname + '/pics'));
 
 let comicbooks = [
@@ -59,15 +75,53 @@ app.get('/', (req, res) => res.json({
   comicbooks: comicbooks
 }));
 
-app.post('/login', (req, res) => {
+app.post('/login', async (req, res, next) => {
   const userEmail = req.body.email;
   const userPassword = req.body.password;
-  let success = true;
-  req.session.user = userEmail;
+
+  try {
+    const result = await pool.query('SELECT * FROM users WHERE email=$1 AND password=$2', [userEmail, userPassword]);    
+    if (result.rowCount === 0) {
+      res.json({
+        success: false
+      });
+      return;
+    }
+  } catch(err) {
+    res.json({
+      success: false
+    });
+    console.log(err);
+    return;
+  } 
+
   res.json({
-    success: success
+    success: true
   });
+
+  req.session.user = userEmail;
+  console.log(req.session.user);
+  req.session.now = Date.now();
+});
+
+app.post('/register', async (req, res) => {
+  const userEmail = req.body.email;
+  const userPassword = req.body.password;
+
+  try {
+    const result = await pool.query('INSERT INTO users (email, password) VALUES($1, $2)', [userEmail, userPassword]);
+  } catch(err) {
+    res.json({
+      success: false
+    });
+    console.log(err);
+    return;
+  }
+
+  res.json({
+    success: true
+  });
+
 });
 
 app.listen(port, () => console.log(`listening on ${port}!`));
-
